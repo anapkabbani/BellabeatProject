@@ -1,0 +1,170 @@
+# Setting Up the Environment
+
+install.packages("tidyverse")
+install.packages("here")
+install.packages("janitor")
+install.packages("skimr")
+
+#Loading libraries
+
+library("tidyverse")
+library("here")
+library("janitor")
+library("skimr")
+
+#Importing Activity, Sleep and Weight Datasets
+
+setwd("/cloud/project/Fitabase Data 4.12.16-5.12.16")
+daily_activity <- read_csv("dailyActivity_merged.csv")
+sleep_day <- read_csv("sleepDay_merged.csv")
+weight_info <- read_csv("weightLogInfo_merged.csv")
+
+# Preparing the Datasets
+
+glimpse(daily_activity)
+skim_without_charts(daily_activity)
+daily_activity_clean <- clean_names(daily_activity)
+duplicated(daily_activity_clean)
+View(daily_activity_clean)
+
+head(sleep_day)
+skim_without_charts(sleep_day)
+sleep_day_cleaned <- clean_names(sleep_day)
+separated_all <- separate(sleep_day_cleaned, sleep_day,into=c('sleep_day','sleep_time'),sep=' ')
+sleep_day_cleaned <- separated_all
+duplicated(sleep_day_cleaned)
+sleep_day_cleaned <- unique(sleep_day_cleaned)
+View(sleep_day_cleaned)
+
+## Cleaning Phase: removing duplicates in sleep_day as 3 duplicated were found, split date and time columns, cleaned column names
+
+head(weight_info)
+skim_without_charts(weight_info)
+weight_info_cleaned <- clean_names(weight_info)
+weight_info_cleaned <- separate(weight_info_cleaned, date,into=c('date','time'),sep=' ')
+duplicated(weight_info_cleaned)
+weight_info_cleaned <- weight_info_cleaned %>% 
+  select(-fat)
+View(weight_info_cleaned)
+
+## Cleaning Phase: checked for duplicates, removed one column, split date and time, cleaned column names
+
+n_distinct(weight_info_cleaned$id)
+n_distinct(sleep_day_cleaned$id)
+n_distinct(daily_activity_clean$id)
+
+# We could see that out of 33 participants, 33 logged their daily steps, 24 logged their sleep and 8 participants logged their weight. 
+# This may be due to the inconvenience of logging the weight daily and using the device while sleeping, which is something that should be considered by Bellabeat.
+
+
+## Analyzing Phase:
+
+daily_activity_clean %>%  
+  select(total_steps,
+         total_distance,
+         sedentary_minutes) %>%
+  summary()
+
+## Analyze Phase: plot and merging data
+
+ggplot(data=daily_activity_clean, aes(x=total_steps, y=sedentary_minutes)) + geom_point()
+
+ggplot(data=sleep_day_cleaned, aes(x=total_minutes_asleep, y=total_time_in_bed)) + geom_point()
+
+combined_weightsleep <- merge(sleep_day_cleaned, weight_info_cleaned, by="id")
+n_distinct(combined_weightsleep$id)
+View(combined_weightsleep)
+
+combined_weightactivity <- merge(daily_activity_clean, weight_info_cleaned, by="id")
+n_distinct(combined_weightactivity$id)
+
+ggplot(data=combined_weightactivity, aes(y=total_steps, x=weight_kg)) + geom_smooth()
+
+ggplot(data=combined_weightactivity, aes(y=calories, x=weight_kg)) + geom_smooth()
+
+combined_sleepactivity <- merge(daily_activity_clean, sleep_day_cleaned, by="id")
+
+n_distinct(combined_sleepactivity$id)
+
+## Cleaning Phase: checked for duplicates, removed one column, split date and time, cleaned column names
+
+n_distinct(weight_info_cleaned$id)
+n_distinct(sleep_day_cleaned$id)
+n_distinct(daily_activity_clean$id)
+
+avg_steps <- aggregate(total_steps ~ id + activity_date, daily_activity_clean, FUN = mean)
+library(ggplot2)
+
+# Analyze :  Calculate the average number of steps per day (all participants)
+
+ggplot(data = avg_steps, aes(x = activity_date, y = total_steps)) +
+  geom_point() +
+  xlab("Number of days") +
+  ylab("Average steps per participant") +
+  ggtitle("Average steps per participant vs. number of days in the study") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+# Analyze :  Calculate the average number of steps per day, regardless of participant ID
+
+avg_steps_all <- aggregate(total_steps ~ activity_date, daily_activity_clean, FUN = mean)
+# Plot the average number of steps per day for all participants
+ggplot(data = avg_steps_all, aes(x = activity_date, y = total_steps)) +
+  geom_point() +
+  xlab("Number of days") +
+  ylab("Average steps per day") +
+  ggtitle("Average steps per day for all participants") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+library(ggplot2)
+library(dplyr)
+
+# Analyze: Calculate the mean number of steps and number of participants for each day
+
+avg_steps_per_day <- daily_activity_clean %>%
+  group_by(activity_date) %>%
+  summarize(avg_steps = mean(total_steps),
+            num_participants = n_distinct(id),
+            num_entries = n())
+
+# Analyze: Calculate the average number of steps per participant per day
+
+avg_steps_per_participant <- avg_steps_per_day %>%
+  mutate(avg_steps_per_participant = avg_steps / num_participants)
+
+# Plot the average number of steps per participant per day
+
+ggplot(data = avg_steps_per_participant, aes(x = activity_date, y = avg_steps_per_participant)) +
+  geom_point() +
+  geom_text(aes(label = num_entries), vjust = -1) +
+  xlab("Number of days") +
+  ylab("Average steps per participant per day") +
+  ggtitle("Average steps per participant per day vs. number of days in the study") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+
+# Calculate the average steps per participant and number of days recorded per month
+
+avg_steps_per_month <- daily_activity_clean %>%
+  mutate(year_month_day = floor_date(mdy(activity_date), "month")) %>%
+  group_by(year_month_day) %>%
+  summarize(avg_steps = mean(total_steps),
+            num_participants = n_distinct(id),
+            num_days_recorded = n_distinct(activity_date))
+
+# Calculate the average steps per each participant per day
+
+avg_steps_per_day <- avg_steps_per_month %>%
+  mutate(avg_steps_per_participant_per_day = avg_steps / num_days_recorded)
+
+# Plot the recording frequency vs monthly steps for the average steps per participant and number of days recorded
+
+ggplot(data = avg_steps_per_month, aes(x = num_days_recorded, y = avg_steps, color = num_participants)) +
+  geom_smooth(method = "loess") +
+  xlab("Number of days recorded") +
+  ylab("Average steps per participant") +
+  ggtitle("Recording frequency vs monthly steps: average steps per participant X number of days recorded") +
+  scale_color_continuous(name = "Number of participants", low = "blue", high = "red")
+
